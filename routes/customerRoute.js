@@ -21,7 +21,7 @@ customerRouter.post(
 customerRouter.get("/all", getAllCustomerController);
 customerRouter.get("/:customerId", getCustomerController);
 customerRouter.post(
-    "update/:customerId",
+    "/update/:customerId",
     validateRequest(updateCustomerSchema),
     updateCustomerController
 );
