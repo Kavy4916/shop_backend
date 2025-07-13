@@ -10,7 +10,7 @@ const depositSchema = new mongoose.Schema({
   receiptId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Receipt",
-    required: true
+    default: null
   },
   date: {
     type: Date,
@@ -27,13 +27,18 @@ const depositSchema = new mongoose.Schema({
   },
   byWhom: {
     type: String,
-    maxlength: 100,
+    maxlength: 50,
     trim: true,
   },
   mode: {
     type: String,
     enum: ["cash", "upi", "cheque", "other"],
     default: "cash",
+  },
+  type:{
+    type: String,
+    enum: ["Normal", "Lahna"],
+    default: "Normal"
   },
   description: {
     type: String,

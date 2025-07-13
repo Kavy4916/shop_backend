@@ -3,11 +3,10 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
-import connectDB from "./utils/db.js";
+import connectDB from "./services/db.js";
 import authRouter from "./routes/authRoute.js";
 import userRouter from "./routes/userRoute.js";
 import authenticateToken from "./middlewares/authMiddleware.js";
-import path from "path";
 
 
 //code 400 or 500 show error message to user

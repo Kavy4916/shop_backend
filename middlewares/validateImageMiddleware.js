@@ -11,7 +11,7 @@ import multer from 'multer';
 });
 
 
-const processImage = (req, res, next) => {
+const validateImage = (req, res, next) => {
   const handler = upload.array("images", 10);
   handler(req, res, (err) => {
     if (err instanceof multer.MulterError) {
@@ -25,4 +25,4 @@ const processImage = (req, res, next) => {
   });
 };
 
-export {processImage};
+export {validateImage};

@@ -31,13 +31,11 @@ const receiptSchema = new mongoose.Schema({
     type: String,
     maxlength: 200,
     trim: true,
+    default: null
   },
   receiptUrl: {
     type: String,
-  },
-  alarm: {
-    type: Boolean,
-    default: false,
+    default: null
   },
   alarmDate: {
     type: Boolean,

@@ -1,11 +1,6 @@
 import mongoose from "mongoose";
 
 const customerSchema = new mongoose.Schema({
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true
-  },
   name: {
     type: String,
     required: true,
@@ -21,7 +16,12 @@ const customerSchema = new mongoose.Schema({
   address: {
     type: String,
     trim: true,
-    default: "unknown"
+    default: null
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true
   },
   password: {
     type: String,
