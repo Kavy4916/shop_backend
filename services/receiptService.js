@@ -75,4 +75,21 @@ const getRecentReceipts = async (session) => {
     throw new AppError("Sevrer error", 500);
   }
 };
-export { createReceipt, getAllReceipt, updateReceipt, getReceipt, getRecentReceipts};
+
+const deleteReceipt = async (receiptId, userId, session) => {
+  try {
+    const oldReceipt = await Receipt.findByIdAndDelete(receiptId).session(session);
+    const receiptLog = {
+      receiptId,
+      action: "delete",
+      changedBy: userId,
+      changes: { new: null, old: oldReceipt },
+    };
+    await ReceiptLog.create([receiptLog], { session });
+  } catch (error) {
+    console.error("Error deleting receipt ", error);
+    throw new AppError("Sevrer error", 500);
+  }
+};
+
+export { createReceipt, getAllReceipt, updateReceipt, getReceipt, getRecentReceipts, deleteReceipt };

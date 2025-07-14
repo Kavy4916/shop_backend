@@ -41,7 +41,7 @@ const validateRequest = ({ bodySchema, paramsSchema, querySchema }) => {
           message: error.details[0].message
         });
       }
-      req.query = value;
+      req.validated = value;
     }
 
     next();

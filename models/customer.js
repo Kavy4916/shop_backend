@@ -6,17 +6,20 @@ const customerSchema = new mongoose.Schema({
     required: true,
     unique: true,
     maxlength: 50,
+    minlength: 3,
     trim: true
   },
   phone: {
     type: String,
-    default : null,
+    default : "",
+    maxlength: 10,
     trim: true
   },
   address: {
     type: String,
     trim: true,
-    default: null
+    default: "",
+    maxlength: 150
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -25,8 +28,9 @@ const customerSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    default: null,
-    trim: true
+    default: "",
+    trim: true,
+    maxlength: 150
   },
 },{ timestamps: true });
 

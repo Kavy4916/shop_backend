@@ -13,6 +13,7 @@ const receiptSchema = new mongoose.Schema({
   amount: {
     type: Number,
     required: true,
+    min: 1
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -29,17 +30,18 @@ const receiptSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    maxlength: 200,
+    maxlength: 150,
     trim: true,
-    default: null
+    default: ""
   },
   receiptUrl: {
     type: String,
-    default: null
+    default: "",
+    maxlength: 100
   },
   alarmDate: {
-    type: Boolean,
-    default: null
+    type: Date,
+    default: ""
   },
 });
 

@@ -28,6 +28,7 @@ const depositSchema = new mongoose.Schema({
   byWhom: {
     type: String,
     maxlength: 50,
+    default: "",
     trim: true,
   },
   mode: {
@@ -42,7 +43,7 @@ const depositSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    maxlength: 200,
+    maxlength: 150,
     trim: true
   }
 });

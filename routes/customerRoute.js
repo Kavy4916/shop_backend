@@ -3,6 +3,7 @@ import validateRequest from "../middlewares/validateRequest.js";
 import {
     createCustomerSchema,
     updateCustomerSchema,
+    getCustomerSchema
 } from "../services/validation/CustomerValidation.js";
 import {
     createCustomerController,
@@ -19,7 +20,7 @@ customerRouter.post(
     createCustomerController
 );
 customerRouter.get("/all", getAllCustomerController);
-customerRouter.get("/:customerId", getCustomerController);
+customerRouter.get("/:customerId",validateRequest(getCustomerSchema), getCustomerController);
 customerRouter.post(
     "/update/:customerId",
     validateRequest(updateCustomerSchema),

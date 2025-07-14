@@ -7,8 +7,10 @@ import {
   updateDeposit,
   deleteDeposit
 } from "../services/depositService.js";
+import AppError from "../utils/AppError.js";
 
 import { getReceipt, updateReceipt } from "../services/receiptService.js";
+import receipt from "../models/receipt.js";
 
 const createDepositWithReceiptIdController = async (req, res) => {
   const session = await mongoose.startSession();
@@ -166,6 +168,89 @@ const updateDeppositWithReceiptIdController = async (req, res) => {
   }
 };
 
+const updateDepositController = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { depositId, customerId } = req.params;
+    const userId = req.userId;
+    const deposit = req.body;
+    const oldDeposit = await getDeposit(depositId, session);
+    if (!oldDeposit || oldDeposit.customerId.toString() !== customerId)
+      throw new AppError("Bad request", 400);
+    await updateDeposit(depositId, deposit, oldDeposit, userId, session);
+    await session.commitTransaction();
+    res.status(200).json({ message: "Deposit updated successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    await session.endSession();
+  }
+}
+
+const getAllUnsettledDepositController = async (req, res) => {
+  const {customerId} = req.params;
+  try {
+    const deposits = await getAllDeposit({receiptId: null, customerId});
+    res.status(200).json(deposits);
+  } catch (error) {
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+const getDepositController = async (req, res) => {
+  const { depositId, customerId } = req.params;
+  try {
+    const deposit = await getDeposit(depositId);
+    if (
+      !deposit ||
+      deposit.customerId.toString() !== customerId
+    )
+      throw new AppError("Deposit not found", 404);
+    res.status(200).json(deposit);
+  } catch (error) {
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const settleDepositController = async (req, res) => {
+  const {customerId, receiptId, depositId} = req.params;
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const deposit = await getDeposit(depositId, session);
+    const receipt = await getReceipt(receiptId, session);
+    if (
+      !deposit || !receipt ||
+      deposit.customerId.toString() !== customerId || receipt.customerId.toString() !== customerId || deposit.receiptId
+    )
+      throw new AppError("Bad request", 400);
+    if(deposit.amount > receipt.due)
+      throw new AppError("Deposit amount is greater than due amount", 400);
+    await updateReceipt(receiptId, { due: receipt.due - deposit.amount }, {due: receipt.due, message: "settled deposit", depositId}, req.userId, session);
+    await updateDeposit(depositId, { receiptId: receipt._id }, {receiptId, message: "settled deposit"}, req.userId, session);
+    await session.commitTransaction();
+    res.status(200).json({ message: "Deposit settled successfully" });
+  } catch (error) {
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    await session.endSession();
+  }
+}
+
 const deleteDepositWithReceiptIdController = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -192,6 +277,54 @@ const deleteDepositWithReceiptIdController = async (req, res) => {
 
 };
 
+const deleteDepositController = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { customerId, depositId } = req.params;
+    const userId = req.userId;
+    const deposit = await getDeposit(depositId, session);
+    if (!deposit || deposit.customerId.toString() !== customerId)
+      throw new AppError("Bad request", 400);
+    await deleteDeposit(depositId, deposit, userId, session);
+    await session.commitTransaction();
+    res.status(204).send();
+  } catch (error) {
+    await session.abortTransaction();
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    await session.endSession();
+  }
+}
+
+const removeDepositController = async (req, res) => {
+  const { customerId, receiptId, depositId } = req.params;
+  const userId = req.userId;
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const receipt = await getReceipt(receiptId, session);
+    const deposit = await getDeposit(depositId, session);
+    if (!receipt || !deposit || receipt.customerId.toString() !== customerId || deposit.customerId.toString() !== customerId || deposit.receiptId.toString() !== receiptId)
+      throw new AppError("Bad request", 400);
+    await updateDeposit(depositId, { receiptId: null }, {receiptId : receiptId, message: "unsettled deposit"}, userId, session);
+    await updateReceipt(receiptId, { due: receipt.due + deposit.amount }, {due: receipt.due, message: "unsettled deposit", depositId}, userId, session);
+    await session.commitTransaction();
+    res.status(204).send();
+  } catch (error) {
+    await session.abortTransaction();
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    await session.endSession();
+  }
+};
+
 export {
   createDepositWithReceiptIdController,
   getAllDepositWithReceiptIdController,
@@ -199,5 +332,11 @@ export {
   getRecentDepositsController,
   getDepositWithReceiptIdController,
   updateDeppositWithReceiptIdController,
-  deleteDepositWithReceiptIdController
+  deleteDepositWithReceiptIdController,
+  getAllUnsettledDepositController,
+  getDepositController,
+  settleDepositController,
+  updateDepositController,
+  deleteDepositController,
+  removeDepositController
 };

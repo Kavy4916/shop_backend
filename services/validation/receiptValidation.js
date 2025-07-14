@@ -14,7 +14,7 @@ const createReceiptSchemaBody = Joi.object({
     "any.required": "Date is required",
     "date.max": "Date cannot be in the future",
   }),
-  description: Joi.string().trim().allow("").max(200).messages({
+  description: Joi.string().trim().allow("").max(150).messages({
     "string.base": "Description must be a string",
     "string.max": "Description cannot exceed 200 characters",
   }),
@@ -25,7 +25,7 @@ const createReceiptSchemaBody = Joi.object({
   }),
 });
 
-const createReceiptSchemaParams = Joi.object({
+const customerIdSchema = Joi.object({
   customerId: Joi.string().length(24).hex().required().messages({
     "string.base": "Customer ID must be a string",
     "string.length": "Customer ID must be 24 characters long",
@@ -35,7 +35,7 @@ const createReceiptSchemaParams = Joi.object({
 });
 
 const createReceiptSchema = {
-  paramsSchema: createReceiptSchemaParams,
+  paramsSchema: customerIdSchema,
   bodySchema: createReceiptSchemaBody,
 }
 
@@ -44,17 +44,17 @@ const updateReceiptSchemaBody = Joi.object({
     "number.base": "Amount must be a number",
     "number.min": "Amount must be greater than 0",
   }),
-  date: Joi.date().max(today).messages({
+  date: Joi.date().max(today).raw().messages({
     "date.base": "Date must be a valid date",
     "date.max": "Date cannot be in the future",
   }),
-  description: Joi.string().trim().allow("").max(200).messages({
+  description: Joi.string().trim().allow("").max(150).messages({
     "string.base": "Description must be a string",
     "string.max": "Description cannot exceed 200 characters",
   }),
 });
 
-const updateReceiptSchemaParams = Joi.object({
+const customerIdReceiptIdSchema = Joi.object({
   receiptId: Joi.string().length(24).hex().required().messages({
     "string.base": "Receipt ID must be a string",
     "string.length": "Receipt ID must be 24 characters long",
@@ -70,25 +70,38 @@ const updateReceiptSchemaParams = Joi.object({
 });
 
 const updateReceiptSchema = {
-  paramsSchema: updateReceiptSchemaParams,
+  paramsSchema: customerIdReceiptIdSchema,
   bodySchema: updateReceiptSchemaBody,
 }
 
-const setReceiptAlarmSchemaBody = Joi.object({
-  alarmDate: Joi.date().required().greater(today).messages({
-    "date.base": "Date must be a valid date",
-    "any.required": "Date is required",
-    "date.greater": "Date must be in the future",
-  }),
+const deleteReceiptSchema = {
+  paramsSchema: customerIdReceiptIdSchema,
+}
+
+const getAllReceiptSchema = {
+  paramsSchema: customerIdSchema,
+}
+
+const receiptURLRegex = /^receipts\/[a-f\d]{24}\/\d{4}-\d{2}-\d{2}_[a-zA-Z0-9]{10}\.pdf$/;
+
+const pdfSchemaQuery = Joi.object({
+  receiptUrl: Joi.string()
+    .pattern(receiptURLRegex, 'receipt URL pattern')
+    .required().messages({
+      "string.base": "Receipt URL must be a string",
+      "string.pattern.base": "Receipt URL must be valid",
+      "any.required": "Receipt URL is required",
+    })
 });
 
-const setReceiptAlarmSchema = {
-  paramsSchema: updateReceiptSchemaParams,
-  bodySchema: setReceiptAlarmSchemaBody,
+const pdfSchema = {
+  querySchema: pdfSchemaQuery,
 }
 
 export {
   createReceiptSchema,
   updateReceiptSchema,
-  setReceiptAlarmSchema,
+  deleteReceiptSchema,
+  getAllReceiptSchema,
+  pdfSchema
 };

@@ -4,6 +4,9 @@ import { validateImage } from "../middlewares/validateImageMiddleware.js";
 import {
   createReceiptSchema,
   updateReceiptSchema,
+  getAllReceiptSchema,
+  deleteReceiptSchema,
+  pdfSchema
 } from "../services/validation/receiptValidation.js";
 
 import {
@@ -13,6 +16,7 @@ import {
   getPdfController,
   getReceiptController,
   getRecentReceiptsController,
+  deleteReceiptController,
 } from "../controllers/receiptController.js";
 
 const receiptRouter = express.Router();
@@ -24,19 +28,25 @@ receiptRouter.post(
   createReceiptController
 );
 
-receiptRouter.get("/all/:customerId", getAllReceiptController);
+receiptRouter.get("/all/:customerId", validateRequest(getAllReceiptSchema), getAllReceiptController);
 
-receiptRouter.get("/:customerId/:receiptId", getReceiptController);
+receiptRouter.get("/:customerId/:receiptId", validateRequest(deleteReceiptSchema), getReceiptController);
 
 receiptRouter.get("/recent", getRecentReceiptsController);
 
-receiptRouter.get("/pdf", getPdfController);
+receiptRouter.get("/pdf",validateRequest(pdfSchema), getPdfController);
 
 receiptRouter.post(
   "/update/:customerId/:receiptId",
   validateImage,
   validateRequest(updateReceiptSchema),
   updateReceiptController
+);
+
+receiptRouter.delete(
+  "/delete/:customerId/:receiptId",
+  validateRequest(deleteReceiptSchema),
+  deleteReceiptController
 );
 
 export default receiptRouter;

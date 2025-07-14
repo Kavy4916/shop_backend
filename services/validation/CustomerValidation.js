@@ -40,7 +40,7 @@ const updateCustomerSchemaBody = Joi.object({
     ),
 });
 
-const updateCustomerSchemaParams = Joi.object({
+const customerIdSchema = Joi.object({
   customerId: Joi.string().length(24).hex().required().messages({
     "string.base": "Customer ID must be a string",
     "string.length": "Customer ID must be 24 characters long",
@@ -50,11 +50,17 @@ const updateCustomerSchemaParams = Joi.object({
 });
 
 const updateCustomerSchema = {
-  paramsSchema: updateCustomerSchemaParams,
+  paramsSchema: customerIdSchema,
   bodySchema: updateCustomerSchemaBody,
+};
+
+
+const getCustomerSchema = {
+  paramsSchema: customerIdSchema,
 };
 
 export {
   createCustomerSchema,
   updateCustomerSchema,
+  getCustomerSchema
 };

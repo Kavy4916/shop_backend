@@ -13,15 +13,13 @@ import {
   getReceipt,
   getRecentReceipts,
   updateReceipt,
+  deleteReceipt
 } from "../services/receiptService.js";
 import { getCustomer } from "../services/customerService.js";
-
-const nanoid = customAlphabet(
-  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
-  10
-);
+import { getAllDeposit, updateDeposit } from "../services/depositService.js";
 import { getISTDateString } from "../utils/utilityFunction.js";
 
+const nanoid = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 10);
 const createReceiptController = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -30,7 +28,7 @@ const createReceiptController = async (req, res) => {
     const { date } = req.body;
     const files = req.files;
     let pdfPath = null;
-    const customer = await getCustomer(customerId, session);
+    const customer = await getCustomer({_id:customerId}, session);
     if (!customer) throw new AppError("Customer not found", 404);
     if (files && files.length > 0) {
       let pdfData = null;
@@ -88,10 +86,7 @@ const getAllReceiptController = async (req, res) => {
   const { customerId } = req.params;
   try {
     const receipts = await getAllReceipt({customerId});
-    const links = receipts.map((receipt) => {
-      return `/receipt/${customerId}/${receipt._id}`;
-    });
-    res.status(200).json({ receipts, links });
+    res.status(200).json(receipts);
   } catch (error) {
     if (error.status)
       return res.status(error.status).json({ message: error.message });
@@ -114,7 +109,7 @@ const getReceiptController = async (req, res) => {
 };
 
 const getPdfController = async (req, res) => {
-  const key = req.query.receiptUrl;
+  const key = req.validated.receiptUrl;
   try {
     const s3Stream = await getPdf(key);
     res.setHeader("Content-Type", "application/pdf");
@@ -209,6 +204,33 @@ const getRecentReceiptsController = async (req, res) => {
   }
 };
 
+const deleteReceiptController = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  const { receiptId,  customerId } = req.params;
+  try {
+    const receipt = await getReceipt(receiptId, session);
+    if (!receipt || receipt.customerId != customerId)
+      throw new AppError("Bad request", 400);
+    const deposits = await getAllDeposit({ receiptId }, session);
+    if (deposits.length > 0) {
+      deposits.forEach(async (deposit) => {
+        await updateDeposit(deposit._id, { receiptId: null }, {receiptId, message: "deleted receipt"}, req.userId, session);
+      })
+    }
+    await deleteReceipt(receiptId, req.userId);
+    await session.commitTransaction();
+    res.status(200).json({ message: "Receipt deleted successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    if (error.status)
+      return res.status(error.status).json({ message: error.message });
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    await session.endSession();
+  }
+};
+
 export {
   createReceiptController,
   getAllReceiptController,
@@ -216,4 +238,5 @@ export {
   getPdfController,
   updateReceiptController,
   getRecentReceiptsController,
+  deleteReceiptController,
 };
