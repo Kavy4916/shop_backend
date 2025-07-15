@@ -126,40 +126,45 @@ const refresh = async (req, res) => {
 const logout = async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
   const authHeader = req.headers["authorization"];
-  const accessToken = authHeader && authHeader.split(" ")[1];
+  const accessToken = authHeader?.split(" ")[1];
 
   const token = refreshToken || accessToken;
 
   if (!token) {
-    return res.sendStatus(204); // No token to delete, but still "successfully logged out"
+    return res.sendStatus(204); // No token present — considered logged out
   }
 
-  try {
-    const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET); // ✅ safer than decode
-    const _id = decoded?.tokenId;
-    const userId = decoded?.userId;
-    const username = decoded?.username;
-
-    if (_id || userId || username) {
-      await Token.deleteMany({ $or: [{ _id }, { userId }, { username }] });
+  // Helper to verify with a given secret
+  const verifyWith = (secret) => {
+    try {
+      return jwt.verify(token, secret);
+    } catch {
+      return null;
     }
-  } catch (error) {
-    try{
-    const decoded = jwt.verify(token,process.env.ACCESS_TOKEN_SECRET);
-     const _id = decoded?.tokenId;
-    const userId = decoded?.userId;
-    const username = decoded?.username;
+  };
 
-    if (_id || userId || username) {
-      await Token.deleteMany({ $or: [{ _id }, { userId }, { username }] });
+  // Try verifying with both secrets
+  const decoded =
+    verifyWith(process.env.REFRESH_TOKEN_SECRET) ||
+    verifyWith(process.env.ACCESS_TOKEN_SECRET);
+
+  if (decoded) {
+    const { tokenId, userId, username } = decoded;
+    try {
+      await Token.deleteMany({
+        $or: [
+          tokenId ? { _id: tokenId } : {},
+          userId ? { userId } : {},
+          username ? { username } : {},
+        ],
+      });
+    } catch (err) {
+      console.error("Failed to delete token(s) during logout:", err);
     }
-  } catch (error) {   
-    console.error("Error verifying token during logout:", error);
-  }
-  console.error("Error verifying token during logout:", error);
+  } else {
+    console.warn("Invalid or expired token used for logout");
   }
 
-  // Always clear the cookie
   res.clearCookie("refreshToken", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

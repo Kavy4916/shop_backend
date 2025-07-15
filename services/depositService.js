@@ -85,7 +85,7 @@ const deleteDeposit = async (depositId, oldDeposit, userId, session) => {
 
 const getRecentDeposits = async (session) => {
   try{
-    const query = Deposit.find({}).select("_id amount").populate({
+    const query = Deposit.find({}).select("_id amount date receiptId").populate({
     path: "customerId",
     select: "_id, name",
   }).sort({ updatedAt: -1 }).limit(10);

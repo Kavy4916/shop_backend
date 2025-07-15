@@ -22,7 +22,7 @@ const changePassword = async (userId, oldPassword, newPassword, session) => {
         }
         const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
         if (!isPasswordValid) {
-            throw new AppError("Password is incorrect", 400);
+            throw new AppError("Password is incorrect", 403);
         }
         const hashedPassword = await bcrypt.hash(newPassword, 12);
         user.password = hashedPassword;
@@ -34,8 +34,9 @@ const changePassword = async (userId, oldPassword, newPassword, session) => {
         };
         await UserLog.create([userLog], { session });
     } catch (error) {
+         if(error.status) throw new AppError(error.message, error.status);
         console.error("Error changing password:", error);
-        throw new AppError("Sevrer error", 500);
+        throw new AppError("Server error", 500);
     }
 };
 

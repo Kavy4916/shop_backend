@@ -64,7 +64,7 @@ const updateReceipt = async (
 
 const getRecentReceipts = async (session) => {
   try{
-    const query = Receipt.find({}).select("_id amount").populate({
+    const query = Receipt.find({}).select("_id amount date description").populate({
     path: "customerId",
     select: "_id, name",
   }).sort({ updatedAt: -1 }).limit(10);
