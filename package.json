@@ -19,6 +19,7 @@
     "generate-password": "^1.7.1",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
     "mongoose": "^8.16.2",
     "multer": "^2.0.1",
     "nanoid": "^5.1.5",

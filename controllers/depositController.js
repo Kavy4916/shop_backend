@@ -1,16 +1,18 @@
 import mongoose from "mongoose";
+import _ from "lodash";
 import {
   getAllDeposit,
   createDeposit,
   getRecentDeposits,
   getDeposit,
   updateDeposit,
-  deleteDeposit
+  deleteDeposit,
 } from "../services/depositService.js";
 import AppError from "../utils/AppError.js";
 
 import { getReceipt, updateReceipt } from "../services/receiptService.js";
-import receipt from "../models/receipt.js";
+import { getOldChangesFields } from "../utils/utilityFunction.js";
+import { createTransactionLog } from "../services/transactionLogService.js";
 
 const createDepositWithReceiptIdController = async (req, res) => {
   const session = await mongoose.startSession();
@@ -19,25 +21,45 @@ const createDepositWithReceiptIdController = async (req, res) => {
     const { customerId, receiptId } = req.params;
     const userId = req.userId;
     const deposit = req.body;
-    const receipt = await getReceipt(receiptId, session);
-    if (
-      !receipt ||
-      receipt.customerId.toString() !== customerId
-    )
+    const receipt = await getReceipt(receiptId, "customerId due", session);
+    if (!receipt || receipt.customerId.toString() !== customerId)
       throw new AppError("Bad request", 400);
-    if (receipt.due < deposit.amount)
+    const newDew = receipt.due - deposit.amount;
+    if (newDew < 0)
       throw new AppError("Deposit amount is greater than due amount", 400);
-    const depositId = await createDeposit(
+    const newDeposit = await createDeposit(
       {
         ...deposit,
         customerId,
         receiptId,
-        createdBy: userId
       },
-      userId,
       session
     );
-    await updateReceipt(receiptId, { due: receipt.due - deposit.amount }, {due: receipt.due, message: "created deposit", depositId}, userId, session);
+    await updateReceipt(
+      receiptId,
+      { due: receipt.due - deposit.amount },
+      session
+    );
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "create deposit receipt",
+      entities: [
+        {
+          type: "Deposit",
+          id: newDeposit._id,
+          action: "create",
+          changes: newDeposit,
+        },
+        {
+          type: "Receipt",
+          id: receiptId,
+          action: "update",
+          changes: { from: { due: receipt.due }, to: { due: newDew } },
+        },
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(201).json({ message: "Deposit created successfully" });
   } catch (error) {
@@ -54,7 +76,11 @@ const createDepositWithReceiptIdController = async (req, res) => {
 const getAllDepositWithReceiptIdController = async (req, res) => {
   const { receiptId, customerId } = req.params;
   try {
-    const deposits = await getAllDeposit({customerId, receiptId});
+    const deposits = await getAllDeposit(
+      { customerId, receiptId },
+      "_id amount receiptId date byWhom mode customerId",
+      { date: -1 }
+    );
     const links = deposits.map((deposit) => {
       return `/deposit/update/receipt/${customerId}/${receiptId}/${deposit._id}`;
     });
@@ -74,7 +100,21 @@ const createDepositController = async (req, res) => {
     const { customerId } = req.params;
     const userId = req.userId;
     const deposit = req.body;
-    await createDeposit({...deposit,  customerId, createdBy: userId}, userId, session);
+    const newDeposit = await createDeposit({ ...deposit, customerId }, session);
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "create deposit",
+      entities: [
+        {
+          type: "Deposit",
+          id: newDeposit._id,
+          action: "create",
+          changes: newDeposit,
+        },
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(201).json({ message: "Deposit created successfully" });
   } catch (error) {
@@ -90,7 +130,11 @@ const createDepositController = async (req, res) => {
 
 const getRecentDepositsController = async (req, res) => {
   try {
-    const recentDeposits = await getRecentDeposits();
+    const recentDeposits = await getRecentDeposits(
+      "_id amount receiptId date",
+      0,
+      10
+    );
     res.status(200).json(recentDeposits);
   } catch (error) {
     if (error.status)
@@ -103,7 +147,10 @@ const getRecentDepositsController = async (req, res) => {
 const getDepositWithReceiptIdController = async (req, res) => {
   const { customerId, depositId, receiptId } = req.params;
   try {
-    const deposit = await getDeposit(depositId);
+    const deposit = await getDeposit(
+      depositId,
+      "_id amount receiptId date byWhom mode customerId type description"
+    );
     if (
       !deposit ||
       deposit.customerId.toString() !== customerId ||
@@ -122,42 +169,54 @@ const getDepositWithReceiptIdController = async (req, res) => {
 const updateDeppositWithReceiptIdController = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  try{
+  try {
     const { customerId, depositId, receiptId } = req.params;
-    const userId = req.userId;  
+    const userId = req.userId;
     const deposit = req.body;
-    const oldDeposit = await getDeposit(depositId, session);
-    const receipt = await getReceipt(receiptId, session);
+    const oldDeposit = await getDeposit(depositId, "", session);
+    const receipt = await getReceipt(receiptId, "customerId due", session);
     if (
       !oldDeposit ||
       !receipt ||
       oldDeposit.customerId.toString() !== customerId ||
-      receipt.customerId.toString() !== customerId
+      receipt.customerId.toString() !== customerId ||
+      oldDeposit.receiptId.toString() !== receiptId
     )
       throw new AppError("Bad request", 400);
+    let due = receipt.due;
     if (deposit.amount && deposit.amount !== oldDeposit.amount) {
-      const due = receipt.due - deposit.amount + oldDeposit.amount;
+      due = due - deposit.amount + oldDeposit.amount;
       if (due < 0) throw new AppError("Due can't be negative", 400);
-      await updateReceipt(
-        receiptId,
-        {due: due},
-        { depositId: depositId,
-        message: "updated deposit",
-        due: receipt.due},
-        userId,
-        session
-      );
+      await updateReceipt(receiptId, { due: due }, session);
     }
-    await updateDeposit(
-      depositId,
-      deposit,
-      oldDeposit,
+    const [old, changes] = getOldChangesFields(oldDeposit, deposit);
+    if (_.isEqual(old, {})) throw new AppError("No changes", 400);
+    await updateDeposit(depositId, changes, session);
+    const transactionLog = {
       userId,
-      session
-    )
+      customerId,
+      operation: "update deposit receipt",
+      entities: [
+        {
+          type: "Deposit",
+          id: depositId,
+          action: "update",
+          changes: { from: old, to: changes },
+        },
+      ],
+    };
+    if (receipt.due !== due) {
+      transactionLog.entities.push({
+        type: "Receipt",
+        id: receiptId,
+        action: "update",
+        changes: { from: { due: receipt.due }, to: { due: due } },
+      });
+    }
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(200).json({ message: "Deposit updated successfully" });
-  } catch(error){
+  } catch (error) {
     await session.abortTransaction();
     if (error.status)
       return res.status(error.status).json({ message: error.message });
@@ -175,10 +234,38 @@ const updateDepositController = async (req, res) => {
     const { depositId, customerId } = req.params;
     const userId = req.userId;
     const deposit = req.body;
-    const oldDeposit = await getDeposit(depositId, session);
-    if (!oldDeposit || oldDeposit.customerId.toString() !== customerId)
+    const oldDeposit = await getDeposit(
+      depositId,
+      "_id customerId receiptId amount date byWhom mode type description",
+      session
+    );
+    if (
+      !oldDeposit ||
+      oldDeposit.customerId.toString() !== customerId ||
+      oldDeposit.receiptId
+    )
       throw new AppError("Bad request", 400);
-    await updateDeposit(depositId, deposit, oldDeposit, userId, session);
+    const [old, changes] = getOldChangesFields(oldDeposit, deposit);
+    if (_.isEqual(old, {})) throw new AppError("No changes", 400);
+    await updateDeposit(
+      depositId,
+      changes,
+      session
+    );
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "update deposit",
+      entities: [
+        {
+          type: "Deposit",
+          id: depositId,
+          action: "update",
+          changes: { from: old, to: changes },
+        },
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(200).json({ message: "Deposit updated successfully" });
   } catch (error) {
@@ -190,12 +277,16 @@ const updateDepositController = async (req, res) => {
   } finally {
     await session.endSession();
   }
-}
+};
 
 const getAllUnsettledDepositController = async (req, res) => {
-  const {customerId} = req.params;
+  const { customerId } = req.params;
   try {
-    const deposits = await getAllDeposit({receiptId: null, customerId});
+    const deposits = await getAllDeposit(
+      { receiptId: null, customerId },
+      "_id amount receiptId date byWhom mode customerId",
+      { date: -1 }
+    );
     res.status(200).json(deposits);
   } catch (error) {
     if (error.status)
@@ -203,16 +294,13 @@ const getAllUnsettledDepositController = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
-}
+};
 
 const getDepositController = async (req, res) => {
   const { depositId, customerId } = req.params;
   try {
     const deposit = await getDeposit(depositId);
-    if (
-      !deposit ||
-      deposit.customerId.toString() !== customerId
-    )
+    if (!deposit || deposit.customerId.toString() !== customerId)
       throw new AppError("Deposit not found", 404);
     res.status(200).json(deposit);
   } catch (error) {
@@ -224,21 +312,58 @@ const getDepositController = async (req, res) => {
 };
 
 const settleDepositController = async (req, res) => {
-  const {customerId, receiptId, depositId} = req.params;
+  const { customerId, receiptId, depositId } = req.params;
+  const userId = req.userId;
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const deposit = await getDeposit(depositId, session);
-    const receipt = await getReceipt(receiptId, session);
+    const deposit = await getDeposit(
+      depositId,
+      "amount _id customerId receiptId",
+      session
+    );
+    const receipt = await getReceipt(receiptId, "customerId due", session);
     if (
-      !deposit || !receipt ||
-      deposit.customerId.toString() !== customerId || receipt.customerId.toString() !== customerId || deposit.receiptId
+      !deposit ||
+      !receipt ||
+      deposit.customerId.toString() !== customerId ||
+      receipt.customerId.toString() !== customerId ||
+      deposit.receiptId
     )
       throw new AppError("Bad request", 400);
-    if(deposit.amount > receipt.due)
+    const newDue = receipt.due - deposit.amount;
+    if (newDue < 0)
       throw new AppError("Deposit amount is greater than due amount", 400);
-    await updateReceipt(receiptId, { due: receipt.due - deposit.amount }, {due: receipt.due, message: "settled deposit", depositId}, req.userId, session);
-    await updateDeposit(depositId, { receiptId: receipt._id }, {receiptId, message: "settled deposit"}, req.userId, session);
+    await updateReceipt(
+      receiptId,
+      { due: newDue },
+      session
+    );
+    await updateDeposit(
+      depositId,
+      {receiptId: receipt._id },
+      session
+    );
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "settle deposit",
+      entities: [
+        {
+          type: "Receipt",
+          id: receiptId,
+          action: "update",
+          changes: { from: { due: receipt.due }, to: { due: newDue } },
+        },
+        {
+          type: "Deposit",
+          id: depositId,
+          action: "update",
+          changes: { from: { receiptId: null }, to: { receiptId: receiptId } },
+        },
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(200).json({ message: "Deposit settled successfully" });
   } catch (error) {
@@ -249,7 +374,7 @@ const settleDepositController = async (req, res) => {
   } finally {
     await session.endSession();
   }
-}
+};
 
 const deleteDepositWithReceiptIdController = async (req, res) => {
   const session = await mongoose.startSession();
@@ -257,12 +382,46 @@ const deleteDepositWithReceiptIdController = async (req, res) => {
   try {
     const { customerId, receiptId, depositId } = req.params;
     const userId = req.userId;
-    const receipt = await getReceipt(receiptId, session);
-    const deposit = await getDeposit(depositId, session);
-    if (!receipt || !deposit || receipt.customerId.toString() !== customerId || deposit.customerId.toString() !== customerId || deposit.receiptId.toString() !== receiptId)
+    const receipt = await getReceipt(receiptId, "_id customerId due", session);
+    const deposit = await getDeposit(depositId, "", session);
+    if (
+      !receipt ||
+      !deposit ||
+      receipt.customerId.toString() !== customerId ||
+      deposit.customerId.toString() !== customerId ||
+      deposit.receiptId.toString() !== receiptId
+    )
       throw new AppError("Bad request", 400);
-    await deleteDeposit(depositId, deposit, userId, session);
-    await updateReceipt(receiptId, { due: receipt.due + deposit.amount }, {due: receipt.due, message: "deleted deposit", depositId}, userId, session);
+    const newDue = receipt.due + deposit.amount;  
+    await deleteDeposit(
+      depositId,
+      session
+    );
+    await updateReceipt(
+      receiptId,
+      { due: newDue },
+      session
+    );
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "delete deposit receipt",
+      entities: [
+        {
+          type: "Deposit",
+          id: depositId,
+          action: "delete",
+          changes: deposit,
+        },
+        {
+          type: "Receipt",
+          id: receiptId,
+          action: "update",
+          changes: { from: { due: receipt.due }, to: { due: newDue } },
+        }
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(204).send();
   } catch (error) {
@@ -274,7 +433,6 @@ const deleteDepositWithReceiptIdController = async (req, res) => {
   } finally {
     await session.endSession();
   }
-
 };
 
 const deleteDepositController = async (req, res) => {
@@ -283,10 +441,24 @@ const deleteDepositController = async (req, res) => {
   try {
     const { customerId, depositId } = req.params;
     const userId = req.userId;
-    const deposit = await getDeposit(depositId, session);
+    const deposit = await getDeposit(depositId, null, session);
     if (!deposit || deposit.customerId.toString() !== customerId)
       throw new AppError("Bad request", 400);
-    await deleteDeposit(depositId, deposit, userId, session);
+    await deleteDeposit(depositId, session);
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "delete deposit",
+      entities: [
+        {
+          type: "Deposit",
+          id: depositId,
+          action: "delete",
+          changes: deposit,
+        },
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(204).send();
   } catch (error) {
@@ -298,7 +470,7 @@ const deleteDepositController = async (req, res) => {
   } finally {
     await session.endSession();
   }
-}
+};
 
 const removeDepositController = async (req, res) => {
   const { customerId, receiptId, depositId } = req.params;
@@ -306,12 +478,51 @@ const removeDepositController = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const receipt = await getReceipt(receiptId, session);
-    const deposit = await getDeposit(depositId, session);
-    if (!receipt || !deposit || receipt.customerId.toString() !== customerId || deposit.customerId.toString() !== customerId || deposit.receiptId.toString() !== receiptId)
+    const receipt = await getReceipt(receiptId, "_id customerId due", session);
+    const deposit = await getDeposit(
+      depositId,
+      "_id customerId receiptId amount",
+      session
+    );
+    if (
+      !receipt ||
+      !deposit ||
+      receipt.customerId.toString() !== customerId ||
+      deposit.customerId.toString() !== customerId ||
+      deposit.receiptId.toString() !== receiptId
+    )
       throw new AppError("Bad request", 400);
-    await updateDeposit(depositId, { receiptId: null }, {receiptId : receiptId, message: "unsettled deposit"}, userId, session);
-    await updateReceipt(receiptId, { due: receipt.due + deposit.amount }, {due: receipt.due, message: "unsettled deposit", depositId}, userId, session);
+    const newDue = receipt.due + deposit.amount;  
+    await updateDeposit(
+      depositId,
+      { receiptId: null },
+      session
+    );
+    await updateReceipt(
+      receiptId,
+      { due: newDue },
+      session
+    );
+    const transactionLog = {
+      userId,
+      customerId,
+      operation: "unsettle deposit",
+      entities: [
+        {
+          type: "Deposit",
+          id: depositId,
+          action: "update",
+          changes: { from: { receiptId }, to: { receiptId: null } },
+        },
+        {
+          type: "Receipt",
+          id: receiptId,
+          action: "update",
+          changes: { from: { due: receipt.due }, to: { due: newDue } },
+        }
+      ],
+    };
+    await createTransactionLog(transactionLog, session);
     await session.commitTransaction();
     res.status(204).send();
   } catch (error) {
@@ -338,5 +549,5 @@ export {
   settleDepositController,
   updateDepositController,
   deleteDepositController,
-  removeDepositController
+  removeDepositController,
 };

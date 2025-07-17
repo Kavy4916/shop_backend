@@ -1,11 +1,14 @@
 import Customer from "../models/customer.js";
 import AppError from "../utils/AppError.js";
-import CustomerLog from "../models/customerLog.js";
 import generator from "generate-password";
 import bcrypt from "bcrypt";
 
-const createCustomer = async (customer, userId, session) => {
+const createCustomer = async (customer, session) => {
   try {
+    if (!session) {
+      console.error("Session not found in createCustomer");
+      throw new AppError("Sevrer error", 500);
+    }
     const password = generator.generate({
       length: 10,
       numbers: true,
@@ -21,22 +24,17 @@ const createCustomer = async (customer, userId, session) => {
     });
 
     await newCustomer.save({ session });
-    const customerLog = {
-      customerId: newCustomer._id,
-      action: "create",
-      changedBy: userId,
-      changes: {new: {...newCustomer, password: null}, old: null},
-    };
-    await CustomerLog.create([customerLog], { session });
+    return newCustomer;
   } catch (error) {
+    if (error.status) throw new AppError(error.message, error.status);
     console.error("Error creating customer:", error);
     throw new AppError("Server error", 500);
   }
 };
 
-const getCustomer = async (customerId, session) => {
+const getCustomer = async (customerId, select, session) => {
   try {
-    const query = Customer.findOne(customerId);
+    const query = Customer.findOne(customerId).select(select);
     if (session) query.session(session);
     return await query;
   } catch (error) {
@@ -45,28 +43,25 @@ const getCustomer = async (customerId, session) => {
   }
 };
 
-const updateCustomer = async (customerId, customer, oldCustomer, userId, session) => {
+const updateCustomer = async (customerId, customer, session) => {
   try {
-    await Customer.findByIdAndUpdate(customerId,{ $set: customer}, {
-      session,
-    });
-    const customerLog = {
+    await Customer.findByIdAndUpdate(
       customerId,
-      action: "update",
-      changedBy: userId,
-      changes: { new: customer, old: oldCustomer },
-    };
-    await CustomerLog.create([customerLog], { session });
+      { $set: customer },
+      {
+        session,
+      }
+    );
   } catch (error) {
     console.error("Error updating customer", error);
     throw new AppError("Sevrer error", 500);
   }
 };
 
-const getAllCustomer = async (session) => {
+const getAllCustomer = async (select, session) => {
   try {
-    const query = Customer.find({}, "_id name address");
-    if (session)  query.session(session);
+    const query = Customer.find({}, "_id name address").select(select);
+    if (session) query.session(session);
     return await query;
   } catch (error) {
     console.error("Error fetching All customers:", error);

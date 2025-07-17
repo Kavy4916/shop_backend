@@ -7,6 +7,7 @@ const customerSchema = new mongoose.Schema({
     unique: true,
     maxlength: 50,
     minlength: 3,
+    immutable: true,
     trim: true
   },
   phone: {
@@ -20,11 +21,6 @@ const customerSchema = new mongoose.Schema({
     trim: true,
     default: "",
     maxlength: 150
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true
   },
   password: {
     type: String,

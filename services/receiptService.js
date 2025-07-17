@@ -1,27 +1,25 @@
 import Receipt from "../models/receipt.js";
-import ReceiptLog from "../models/receiptLog.js";
 import AppError from "../utils/AppError.js";
 
-const createReceipt = async (receipt, userId, session) => {
+const createReceipt = async (receipt, session) => {
   try {
+    if(!session) {
+      console.error("No session provided at create receipt");
+      throw new AppError("Server error", 500);
+    }
     const newReceipt = await Receipt.create([receipt], { session });
-    const receiptLog = {
-      receiptId: newReceipt[0]._id,
-      action: "create",
-      changedBy: newReceipt[0].createdBy,
-      changes:{new: newReceipt[0], old: null}
-    };
-    await ReceiptLog.create([receiptLog], { session });
+    return newReceipt[0];
   } catch (error) {
     console.error("Error creating receipt:", error);
     throw new AppError("Sevrer error", 500);
   }
 };
 
-const getAllReceipt = async (filter, session) => {
+const getAllReceipt = async (filter, select, sort, session) => {
   try {
-    const query = Receipt.find(filter);
+    const query = Receipt.find(filter).select(select);
     if (session) query.session(session);
+    if (sort) query.sort(sort);
     return await query;
   } catch (error) {
     console.error("Error fetching Receipts", error);
@@ -29,9 +27,9 @@ const getAllReceipt = async (filter, session) => {
   }
 };
 
-const getReceipt = async (receiptId, session) => {
+const getReceipt = async (receiptId, select, session) => {
   try {
-    const query = Receipt.findById(receiptId);
+    const query = Receipt.findById(receiptId).select(select);
     if (session) query.session(session);
     return await query;
   } catch (error) {
@@ -40,22 +38,29 @@ const getReceipt = async (receiptId, session) => {
   }
 };
 
+const populateReceipt = async (receipts, path, select, session) => {
+  try {
+    const query = Receipt.populate( receipts, { path, select });
+    if (session) query.session(session);
+    return await query;
+  } catch (error) {
+    console.error("Error fetching receipt ", error);
+    throw new AppError("Sevrer error", 500);
+  }
+};
+
+
 const updateReceipt = async (
   receiptId,
   receipt,
-  oldReceipt,
-  userId,
   session
 ) => {
+  if(!session) {
+    console.error("No session provided at update receipt");
+    throw new AppError("Server error", 500);
+  }
   try {
     await Receipt.findByIdAndUpdate(receiptId, { $set: receipt }).session(session);
-    const receiptLog = {
-      receiptId,
-      action: "update",
-      changedBy: userId,
-      changes: { new:  receipt, old: oldReceipt },
-    };
-    await ReceiptLog.create([receiptLog], { session });
   } catch (error) {
     console.error("Error updating receipt ", error);
     throw new AppError("Sevrer error", 500);
@@ -76,20 +81,17 @@ const getRecentReceipts = async (session) => {
   }
 };
 
-const deleteReceipt = async (receiptId, userId, session) => {
+const deleteReceipt = async (receiptId, session) => {
+  if(!session) {
+    console.error("No session provided at delete receipt");
+    throw new AppError("Server error", 500);
+  }
   try {
-    const oldReceipt = await Receipt.findByIdAndDelete(receiptId).session(session);
-    const receiptLog = {
-      receiptId,
-      action: "delete",
-      changedBy: userId,
-      changes: { new: null, old: oldReceipt },
-    };
-    await ReceiptLog.create([receiptLog], { session });
+    await Receipt.findByIdAndDelete(receiptId).session(session);
   } catch (error) {
     console.error("Error deleting receipt ", error);
     throw new AppError("Sevrer error", 500);
   }
 };
 
-export { createReceipt, getAllReceipt, updateReceipt, getReceipt, getRecentReceipts, deleteReceipt };
+export { createReceipt, getAllReceipt, updateReceipt, getReceipt, getRecentReceipts, deleteReceipt, populateReceipt };

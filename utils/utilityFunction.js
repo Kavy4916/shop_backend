@@ -6,4 +6,16 @@ const getISTDateString = () =>{
     return nowIST.toISOString().split('T')[0];
 }
 
-export {getISTDateString};
+const getOldChangesFields = (original, current) => {
+  const old = {};
+  const changes = {};
+  for (const key in current) {
+    if (current[key] !== original[key]) {
+      changes[key] = current[key];
+      old[key] = original[key];
+    }
+  }
+  return [old, changes];
+};
+
+export {getISTDateString, getOldChangesFields};

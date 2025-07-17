@@ -15,11 +15,6 @@ const receiptSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
   due: {
     type: Number,
     default: function () {
@@ -38,10 +33,6 @@ const receiptSchema = new mongoose.Schema({
     type: String,
     default: "",
     maxlength: 100
-  },
-  alarmDate: {
-    type: Date,
-    default: ""
   },
 });
 
