@@ -6,7 +6,7 @@ import Token from "../models/token.js";
 
 const login = async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password || username.length > 20 || password.length > 20) {
+  if (!username || !password || username.length > 50 || password.length > 20) {
     return res
       .status(400)
       .json({ message: "Please provide correct username or password" });
@@ -23,7 +23,7 @@ const login = async (req, res) => {
         .status(401)
         .json({ message: "Please provide correct username or password"});
     }
-    await Token.deleteMany({ username }); // Clean up old tokens
+    await Token.deleteMany({$or: [{username}, { userId: user._id}]}); // Clean up old tokens
     const newToken = new Token({
       username,
       userId: user._id,
